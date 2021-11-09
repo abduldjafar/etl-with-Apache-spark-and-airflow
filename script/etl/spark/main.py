@@ -8,7 +8,14 @@ from pyspark.sql.functions import (
     row_number,
     sum,
     format_number,
+    max,
+    min,
+    year,
+    month,
+    lit,
+    concat,
 )
+from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
 
@@ -89,7 +96,48 @@ def get_top_10_restaurant_transactions(df):
         .orderBy(col("total_transactionAmount").desc())
         .withColumn(
             "total_transactionAmount", format_number("total_transactionAmount", 2)
-        ).drop("sum(transactionAmount)")
+        )
+        .drop("sum(transactionAmount)")
+        .limit(10)
+    )
+
+
+def get_max_min_date(df):
+    return (
+        df.select(min("transactionDate"), max("transactionDate"))
+        .limit(1)
+        .withColumn("min_date", col("min(transactionDate)"))
+        .withColumn("max_date", col("max(transactionDate)"))
+        .drop("min(transactionDate)")
+        .drop("max(transactionDate)")
+    )
+
+
+def get_amount_transaction_every_day(df):
+    return (
+        df.groupBy("restaurantName").pivot("transactionDate").sum("transactionAmount")
+    )
+
+
+def get_amount_transaction_every_mounth(df):
+    return (
+        df.withColumn("year", year("transactionDate").cast("string"))
+        .withColumn("month", month("transactionDate").cast("string"))
+        .withColumn("year_month", concat(col("year"), lit("-"), col("month")))
+        .drop("year")
+        .drop("month")
+        .groupBy("restaurantName")
+        .pivot("year_month")
+        .sum("transactionAmount")
+    )
+
+
+def get_amount_transaction_every_year(df):
+    return (
+        df.withColumn("year", year("transactionDate").cast("string"))
+        .groupBy("restaurantName")
+        .pivot("year")
+        .sum("transactionAmount")
     )
 
 
@@ -114,6 +162,17 @@ if __name__ == "__main__":
         cleaned_purchase_history_table
     )
 
+    amount_transaction_every_day = get_amount_transaction_every_day(
+        cleaned_purchase_history_table
+    )
+    amount_transaction_every_mounth = get_amount_transaction_every_mounth(
+        cleaned_purchase_history_table
+    )
+    amount_transaction_every_year = get_amount_transaction_every_year(
+        cleaned_purchase_history_table
+    )
+
     user_table.show()
     cleaned_purchase_history_table.show()
     top_10_restaurant_transactions.show()
+    amount_transaction_every_year.show()
