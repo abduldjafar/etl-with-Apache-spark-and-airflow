@@ -1,6 +1,14 @@
 from config.config import Config
 from config.initialize import Initialize
-from pyspark.sql.functions import explode, col, to_date, unix_timestamp, row_number,sum,format_number
+from pyspark.sql.functions import (
+    explode,
+    col,
+    to_date,
+    unix_timestamp,
+    row_number,
+    sum,
+    format_number,
+)
 from pyspark.sql.window import Window
 
 
@@ -59,13 +67,29 @@ def cleansing_history_table(df):
             "row",
             row_number().over(Window.partitionBy("id").orderBy(col("transactionDate"))),
         )
-        .withColumn("historyTransactionAmount",sum("transactionAmount").over(Window.partitionBy("id").orderBy("transactionDate"))) \
-        .withColumn("cashBalance",col("cashBalance")-col("historyTransactionAmount"))   \
+        .withColumn(
+            "historyTransactionAmount",
+            sum("transactionAmount").over(
+                Window.partitionBy("id").orderBy("transactionDate")
+            ),
+        )
+        .withColumn("cashBalance", col("cashBalance") - col("historyTransactionAmount"))
         .drop("historyTransactionAmount")
-        .withColumn("finalCashBalance",format_number("cashBalance",2)) \
+        .withColumn("finalCashBalance", format_number("cashBalance", 2))
         .drop("cashBalance")
         .drop("row")
-                                 
+    )
+
+
+def get_top_10_restaurant_transactions(df):
+    return (
+        df.groupBy("restaurantName")
+        .agg(sum("transactionAmount"))
+        .withColumn("total_transactionAmount", col("sum(transactionAmount)"))
+        .orderBy(col("total_transactionAmount").desc())
+        .withColumn(
+            "total_transactionAmount", format_number("total_transactionAmount", 2)
+        ).drop("sum(transactionAmount)")
     )
 
 
@@ -85,8 +109,11 @@ if __name__ == "__main__":
     user_table = create_user_table(second_data_frame)
     purchase_history_table = create_purchase_history_table(second_data_frame)
 
-
     cleaned_purchase_history_table = cleansing_history_table(purchase_history_table)
+    top_10_restaurant_transactions = get_top_10_restaurant_transactions(
+        cleaned_purchase_history_table
+    )
 
     user_table.show()
     cleaned_purchase_history_table.show()
+    top_10_restaurant_transactions.show()
