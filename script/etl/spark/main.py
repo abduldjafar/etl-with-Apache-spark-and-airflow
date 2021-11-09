@@ -173,6 +173,17 @@ if __name__ == "__main__":
     )
 
     user_table.show()
+    print("########################")
+    print("cleaned purchase history table")
+    print("########################")
     cleaned_purchase_history_table.show()
+
+    print("########################")
+    print("top 10 best amount restaurant transaction")
+    print("########################")
     top_10_restaurant_transactions.show()
+
+    print("########################")
+    print("get amount restaurant transaction every year")
+    print("########################")
     amount_transaction_every_year.show()
