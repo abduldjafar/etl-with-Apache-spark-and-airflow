@@ -31,4 +31,6 @@ jobs:
           cd script
           cd etl
           cd spark
+          cat /proc/cpuinfo  | grep process| wc -l
+          grep MemTotal /proc/meminfo | awk '{print $2 / 1024}'
           python main.py
