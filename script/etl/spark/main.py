@@ -1,6 +1,7 @@
 from config.config import Config
 from config.initialize import Initialize
-from pyspark.sql.functions import explode, col, regexp_replace
+from pyspark.sql.functions import explode, col, to_date, unix_timestamp, row_number,sum,format_number
+from pyspark.sql.window import Window
 
 
 def init_config():
@@ -29,6 +30,45 @@ def create_menu_table(df):
     )
 
 
+def create_user_table(df):
+    return df.drop("purchaseHistory")
+
+
+def create_purchase_history_table(df):
+    return (
+        df.withColumn("purchaseHistory", explode(col("purchaseHistory")))
+        .withColumn("dishName", col("purchaseHistory.dishName"))
+        .withColumn("restaurantName", col("purchaseHistory.restaurantName"))
+        .withColumn("transactionAmount", col("purchaseHistory.transactionAmount"))
+        .withColumn("transactionDate", col("purchaseHistory.transactionDate"))
+    )
+
+
+def cleansing_history_table(df):
+    return (
+        df.withColumn(
+            "transactionDate",
+            to_date(
+                unix_timestamp(
+                    col("purchaseHistory.transactionDate"), "MM/dd/yyyy hh:mm a"
+                ).cast("timestamp")
+            ),
+        )
+        .drop("purchaseHistory")
+        .withColumn(
+            "row",
+            row_number().over(Window.partitionBy("id").orderBy(col("transactionDate"))),
+        )
+        .withColumn("historyTransactionAmount",sum("transactionAmount").over(Window.partitionBy("id").orderBy("transactionDate"))) \
+        .withColumn("cashBalance",col("cashBalance")-col("historyTransactionAmount"))   \
+        .drop("historyTransactionAmount")
+        .withColumn("finalCashBalance",format_number("cashBalance",2)) \
+        .drop("cashBalance")
+        .drop("row")
+                                 
+    )
+
+
 def create_restaurant_table(df):
     return df.drop("menu")
 
@@ -38,4 +78,15 @@ if __name__ == "__main__":
     menu_table = create_menu_table(data_frame)
     restaurant_table = create_restaurant_table(data_frame)
 
-    restaurant_table.show()
+    second_data_frame = load_json_files(
+        "data_set/users_with_purchase_history_clean.json"
+    )
+
+    user_table = create_user_table(second_data_frame)
+    purchase_history_table = create_purchase_history_table(second_data_frame)
+
+
+    cleaned_purchase_history_table = cleansing_history_table(purchase_history_table)
+
+    user_table.show()
+    cleaned_purchase_history_table.show()
