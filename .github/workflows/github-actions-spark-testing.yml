@@ -3,7 +3,7 @@ name: Pysaprk Testing Script
 on: [push]
 
 jobs:
-  build:
+  run-testing:
     runs-on: ubuntu-latest
     strategy:
       matrix:
