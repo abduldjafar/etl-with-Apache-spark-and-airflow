@@ -358,23 +358,3 @@ if __name__ == "__main__":
     avg_total_hours_with_tot_trx = get_avg_total_hours_with_tot_trx(
         restaurant_transactions_amount, avg_hours_restaurant_open_weekly
     )
-
-    """
-    
-    
-    print("################################")
-    print("cleaned purchase history table")
-    print("################################")
-    cleaned_purchase_history_table.show()
-
-    print("########################################################")
-    print("top 10 best amount restaurant transaction")
-    print("########################################################")
-    top_10_restaurant_transactions.show()
-
-    print("########################################################")
-    print("get amount restaurant transaction every year")
-    print("########################################################")
-    amount_transaction_every_year.show()
-
-    """
