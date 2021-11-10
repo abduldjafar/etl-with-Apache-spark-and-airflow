@@ -20,9 +20,9 @@ from pyspark.sql.functions import (
     trim,
     upper,
     length,
-    from_unixtime,
+    to_timestamp,
+    regexp_replace,
 )
-from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
 
@@ -37,7 +37,6 @@ def spark_session():
 
 
 def load_json_files(file_name):
-    spark_session().sql("set spark.sql.legacy.timeParserPolicy=LEGACY")
     df = spark_session().read.json(file_name)
     return df
 
@@ -97,6 +96,10 @@ def cleansing_history_table(df):
 
 
 def get_top_10_restaurant_transactions(df):
+    return get_restaurant_transactions_amount(df).limit(10)
+
+
+def get_restaurant_transactions_amount(df):
     return (
         df.groupBy("restaurantName")
         .agg(sum("transactionAmount"))
@@ -106,7 +109,7 @@ def get_top_10_restaurant_transactions(df):
             "total_transactionAmount", format_number("total_transactionAmount", 2)
         )
         .drop("sum(transactionAmount)")
-        .limit(10)
+        .withColumnRenamed("restaurantName", "restaurant_name")
     )
 
 
@@ -242,12 +245,7 @@ def cleaning_restaurant_table(df):
                 )
             ),
         )
-        .withColumn(
-            "open",
-            from_unixtime(
-                unix_timestamp("open", "MM/dd/yyyy hh:mm:ss aa"), "MM/dd/yyyy HH:mm:ss"
-            ),
-        )
+        .withColumn("open_in_24_hours", to_timestamp("open", "MM/dd/yyyy hh:mm a"))
         .withColumn(
             "close",
             when(
@@ -265,23 +263,60 @@ def cleaning_restaurant_table(df):
                 )
             ),
         )
+        .withColumn("close_in_24_hours", to_timestamp("close", "MM/dd/yyyy hh:mm a"))
+        .withColumn(
+            "total_hours",
+            col("close_in_24_hours").cast("long")
+            - col("open_in_24_hours").cast("long"),
+        )
         .withColumn(
             "close",
-            from_unixtime(
-                unix_timestamp("close", "MM/dd/yyyy hh:mm:ss aa"), "MM/dd/yyyy HH:mm:ss"
-            ),
+            when(
+                col("total_hours") < 0,
+                regexp_replace("close", "01/01/2020", "01/02/2020"),
+            ).otherwise(col("close")),
         )
-        .withColumn("total_hours", col("close") - col("open"))
+        .withColumn("close_in_24_hours", to_timestamp("close", "MM/dd/yyyy hh:mm a"))
+        .withColumn(
+            "total_hours_unix",
+            (
+                unix_timestamp(col("close_in_24_hours"))
+                - unix_timestamp(col("open_in_24_hours"))
+            )
+            / lit(3600),
+        )
+        .withColumn(
+            "total_hours",
+            (col("close_in_24_hours")) - (col("open_in_24_hours")),
+        )
+        .drop("close_in_24_hours")
+        .drop("open_in_24_hours")
     )
 
 
-"""
- .withColumn("open",
-            when(size(split(col("open"),":")) > 1, concat(lit("01/01/2020 "),col("open"))).otherwise(
-                concat(lit("01/01/2020 "),split(col("open")," ")[0],lit(":00 "),split(col("open")," ")[1])
-            )
+def get_avg_hours_restaurant_open_weekly(df):
+    return (
+        df.groupBy("restaurantName")
+        .avg("total_hours_unix")
+        .withColumn("avg_total_hours_in_week", col("avg(total_hours_unix)"))
+        .withColumn(
+            "avg_total_hours_in_week", format_number("avg_total_hours_in_week", 2)
         )
-"""
+        .orderBy(col("avg_total_hours_in_week").desc())
+        .drop("avg(total_hours_unix)")
+    )
+
+
+def get_avg_total_hours_with_tot_trx(df1, df2):
+    return (
+        df1.join(
+            df2,
+            df1.restaurant_name == df2.restaurantName,
+            "inner",
+        )
+        .drop("restaurantName")
+        .orderBy(col("total_transactionAmount").desc())
+    )
 
 
 if __name__ == "__main__":
@@ -301,6 +336,10 @@ if __name__ == "__main__":
         cleaned_purchase_history_table
     )
 
+    restaurant_transactions_amount = get_restaurant_transactions_amount(
+        cleaned_purchase_history_table
+    )
+
     amount_transaction_every_day = get_amount_transaction_every_day(
         cleaned_purchase_history_table
     )
@@ -311,12 +350,17 @@ if __name__ == "__main__":
         cleaned_purchase_history_table
     )
 
-    user_table.show()
-    restaurant_table.show(truncate=False)
-    menu_table.show(truncate=False)
-    cleaning_restaurant_table(restaurant_table).show(truncate=False)
+    cleaned_restaurant_table = cleaning_restaurant_table(restaurant_table)
+    avg_hours_restaurant_open_weekly = get_avg_hours_restaurant_open_weekly(
+        cleaned_restaurant_table
+    )
+
+    avg_total_hours_with_tot_trx = get_avg_total_hours_with_tot_trx(
+        restaurant_transactions_amount, avg_hours_restaurant_open_weekly
+    )
 
     """
+    
     
     print("################################")
     print("cleaned purchase history table")
