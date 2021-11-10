@@ -10,10 +10,17 @@ from pyspark.sql.functions import (
     format_number,
     max,
     min,
+    when,
     year,
     month,
     lit,
     concat,
+    split,
+    size,
+    trim,
+    upper,
+    length,
+    from_unixtime,
 )
 from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
@@ -30,6 +37,7 @@ def spark_session():
 
 
 def load_json_files(file_name):
+    spark_session().sql("set spark.sql.legacy.timeParserPolicy=LEGACY")
     df = spark_session().read.json(file_name)
     return df
 
@@ -145,6 +153,137 @@ def create_restaurant_table(df):
     return df.drop("menu")
 
 
+def cleaning_restaurant_table(df):
+    return (
+        df.withColumn("openingHours", split(col("openingHours"), "/"))
+        .withColumn("openingHours", explode(col("openingHours")))
+        .withColumn("openingHours", split(col("openingHours"), ","))
+        .withColumn(
+            "openingHours",
+            when(
+                size(col("openingHours")) == 2,
+                concat(
+                    col("openingHours")[0],
+                    lit(" "),
+                    split(col("openingHours")[1], " ")[2],
+                    lit(" "),
+                    split(col("openingHours")[1], " ")[3],
+                    lit(" "),
+                    split(col("openingHours")[1], " ")[4],
+                    lit(" "),
+                    split(col("openingHours")[1], " ")[5],
+                    lit(" "),
+                    split(col("openingHours")[1], " ")[6],
+                    lit(","),
+                    col("openingHours")[1],
+                ),
+            ).otherwise(col("openingHours")[0]),
+        )
+        .withColumn("openingHours", split(col("openingHours"), ","))
+        .withColumn("openingHours", explode(col("openingHours")))
+        .withColumn("openingHours", trim(col("openingHours")))
+        .withColumn("day", split(col("openingHours"), " ")[0])
+        .withColumn(
+            "open",
+            concat(
+                split(col("openingHours"), " ")[1],
+                lit(" "),
+                split(col("openingHours"), " ")[2],
+            ),
+        )
+        .withColumn(
+            "close",
+            concat(
+                split(col("openingHours"), " ")[4],
+                lit(" "),
+                split(col("openingHours"), " ")[5],
+            ),
+        )
+        .drop("openingHours")
+        .drop("cashBalance")
+        .withColumn(
+            "open",
+            when(length(split(col("open"), ":")[0]) > 1, col("open")).otherwise(
+                concat(
+                    lit("0"),
+                    split(col("open"), ":")[0],
+                    lit(":"),
+                    split(col("open"), ":")[1],
+                )
+            ),
+        )
+        .withColumn(
+            "close",
+            when(length(split(col("close"), ":")[0]) > 1, col("close")).otherwise(
+                concat(
+                    lit("0"),
+                    split(col("close"), ":")[0],
+                    lit(":"),
+                    split(col("close"), ":")[1],
+                )
+            ),
+        )
+        .withColumn("open", upper(col("open")))
+        .withColumn("close", upper(col("close")))
+        .withColumn(
+            "open",
+            when(
+                size(split(col("open"), ":")) > 1,
+                concat(lit("01/01/2020 "), col("open")),
+            ).otherwise(
+                concat(
+                    lit("01/01/2020 "),
+                    when(length(split(col("open"), " ")[0]) > 1, "").otherwise(
+                        lit("0")
+                    ),
+                    split(col("open"), " ")[0],
+                    lit(":00 "),
+                    split(col("open"), " ")[1],
+                )
+            ),
+        )
+        .withColumn(
+            "open",
+            from_unixtime(
+                unix_timestamp("open", "MM/dd/yyyy hh:mm:ss aa"), "MM/dd/yyyy HH:mm:ss"
+            ),
+        )
+        .withColumn(
+            "close",
+            when(
+                size(split(col("close"), ":")) > 1,
+                concat(lit("01/01/2020 "), col("close")),
+            ).otherwise(
+                concat(
+                    lit("01/01/2020 "),
+                    when(length(split(col("close"), " ")[0]) > 1, "").otherwise(
+                        lit("0")
+                    ),
+                    split(col("close"), " ")[0],
+                    lit(":00 "),
+                    split(col("close"), " ")[1],
+                )
+            ),
+        )
+        .withColumn(
+            "close",
+            from_unixtime(
+                unix_timestamp("close", "MM/dd/yyyy hh:mm:ss aa"), "MM/dd/yyyy HH:mm:ss"
+            ),
+        )
+        .withColumn("total_hours", col("close") - col("open"))
+    )
+
+
+"""
+ .withColumn("open",
+            when(size(split(col("open"),":")) > 1, concat(lit("01/01/2020 "),col("open"))).otherwise(
+                concat(lit("01/01/2020 "),split(col("open")," ")[0],lit(":00 "),split(col("open")," ")[1])
+            )
+        )
+"""
+
+
 if __name__ == "__main__":
     data_frame = load_json_files("data_set/restaurant_menu_clean.json")
     menu_table = create_menu_table(data_frame)
@@ -173,17 +312,25 @@ if __name__ == "__main__":
     )
 
     user_table.show()
-    print("########################")
+    restaurant_table.show(truncate=False)
+    menu_table.show(truncate=False)
+    cleaning_restaurant_table(restaurant_table).show(truncate=False)
+
+    """
+    
+    print("################################")
     print("cleaned purchase history table")
-    print("########################")
+    print("################################")
     cleaned_purchase_history_table.show()
 
-    print("########################")
+    print("########################################################")
     print("top 10 best amount restaurant transaction")
-    print("########################")
+    print("########################################################")
     top_10_restaurant_transactions.show()
 
-    print("########################")
+    print("########################################################")
     print("get amount restaurant transaction every year")
-    print("########################")
+    print("########################################################")
     amount_transaction_every_year.show()
+
+    """
