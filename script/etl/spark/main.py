@@ -33,7 +33,9 @@ def init_config():
 
 def spark_session():
     initialize = Initialize()
-    return initialize.start_spark()
+    return initialize.start_spark({
+        "spark.jars":"jars/neo4j-connector.jar"
+    })
 
 
 def load_json_files(file_name):
@@ -358,3 +360,5 @@ if __name__ == "__main__":
     avg_total_hours_with_tot_trx = get_avg_total_hours_with_tot_trx(
         restaurant_transactions_amount, avg_hours_restaurant_open_weekly
     )
+
+    amount_transaction_every_day.show()

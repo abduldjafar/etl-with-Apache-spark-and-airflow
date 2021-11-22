@@ -6,7 +6,7 @@ Module containing helper function for use with Apache Spark
 
 import __main__
 
-from os import environ, listdir, path
+from os import environ, getenv
 from pyspark.sql import SparkSession
 
 
@@ -19,8 +19,9 @@ class Initialize(object):
         # detect execution environment
         flag_repl = not (hasattr(__main__, "__file__"))
         flag_debug = "DEBUG" in environ.keys()
+        mode = getenv("k8s")
 
-        if not (flag_repl or flag_debug):
+        if not (flag_repl or flag_debug) or mode == "k8s":
             # get Spark session factory
             spark_builder = SparkSession.builder.appName(app_name)
         else:
