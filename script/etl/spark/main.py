@@ -403,5 +403,5 @@ if __name__ == "__main__":
             "dishName", "restaurantName", "transactionAmount"
         ).distinct(),
         "MATCH (d:Dishes {name: event.dishName})-[b:buy_in]->(r:Restaurant {name: event.restaurantName}) "
-        + "CREATE (d)-[:has_price]->(:Price {amount: event.transactionAmount})",
+        + "CREATE (d)-[:transaction_amount]->(:Price {amount: event.transactionAmount})",
     )
