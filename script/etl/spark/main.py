@@ -373,9 +373,7 @@ if __name__ == "__main__":
         restaurant_transactions_amount, avg_hours_restaurant_open_weekly
     )
 
-    user_table.show()
-    purchase_history_table.show()
-
+    # write to neo4j
     write_to_neo4j(restaurant_table, "CREATE (:Restaurant {name:event.restaurantName})")
     write_to_neo4j(
         user_table.select("name").distinct(), "CREATE (:Customer {name:event.name})"
@@ -389,5 +387,21 @@ if __name__ == "__main__":
         "MATCH (customer:Customer {name: event.name}) "
         + "MATCH (restaurant:Restaurant {name: event.restaurantName}) "
         + "MATCH (dishes:Dishes {name: event.dishName}) "
-        + "CREATE (customer)-[r:has_buy]->(dishes)->[b:buy_at]->(restaurant)",
+        + "CREATE (customer)-[r:has_buy]->(dishes)",
+    )
+
+    write_to_neo4j(
+        purchase_history_table,
+        "MATCH (customer:Customer {name: event.name}) "
+        + "MATCH (restaurant:Restaurant {name: event.restaurantName}) "
+        + "MATCH (dishes:Dishes {name: event.dishName}) "
+        + "CREATE (dishes)-[r:buy_in]->(restaurant)",
+    )
+
+    write_to_neo4j(
+        purchase_history_table.select(
+            "dishName", "restaurantName", "transactionAmount"
+        ).distinct(),
+        "MATCH (d:Dishes {name: event.dishName})-[b:buy_in]->(r:Restaurant {name: event.restaurantName}) "
+        + "CREATE (d)-[:has_price]->(:Price {amount: event.transactionAmount})",
     )
