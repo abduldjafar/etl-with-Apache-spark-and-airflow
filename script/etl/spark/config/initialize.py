@@ -20,6 +20,7 @@ class Initialize(object):
         flag_repl = not (hasattr(__main__, "__file__"))
         flag_debug = "DEBUG" in environ.keys()
         mode = getenv("k8s")
+        spark_builder = None
 
         if not (flag_repl or flag_debug) or mode == "k8s":
             # get Spark session factory
@@ -29,8 +30,10 @@ class Initialize(object):
             spark_builder = SparkSession.builder.master(master).appName(app_name)
 
             # add other config params
+        print(spark_config)
         if len(spark_config) > 0:
             for key, val in spark_config.items():
+                print(key, val)
                 spark_builder.config(key, val)
 
         # create session and retrieve Spark logger object

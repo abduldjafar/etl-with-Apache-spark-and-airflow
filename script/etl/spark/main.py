@@ -33,9 +33,9 @@ def init_config():
 
 def spark_session():
     initialize = Initialize()
-    return initialize.start_spark({
-        "spark.jars":"jars/neo4j-connector.jar"
-    })
+    return initialize.start_spark(
+        spark_config={"spark.jars": "jars/neo4j-connector.jar"}
+    )
 
 
 def load_json_files(file_name):
@@ -321,6 +321,18 @@ def get_avg_total_hours_with_tot_trx(df1, df2):
     )
 
 
+def write_to_neo4j(df, query):
+    df.write.format("org.neo4j.spark.DataSource").mode("overwrite").option(
+        "url", "neo4j+s://0a495e9c.databases.neo4j.io:7687"
+    ).option("authentication.type", "basic").option(
+        "authentication.basic.username", "neo4j"
+    ).option(
+        "authentication.basic.password", "LExlNbUp5abBbShOlWnFLk_05LJ4_nCuWdbuCidzHmk"
+    ).option(
+        "query", query
+    ).save()
+
+
 if __name__ == "__main__":
     data_frame = load_json_files("data_set/restaurant_menu_clean.json")
     menu_table = create_menu_table(data_frame)
@@ -361,4 +373,21 @@ if __name__ == "__main__":
         restaurant_transactions_amount, avg_hours_restaurant_open_weekly
     )
 
-    amount_transaction_every_day.show()
+    user_table.show()
+    purchase_history_table.show()
+
+    write_to_neo4j(restaurant_table, "CREATE (:Restaurant {name:event.restaurantName})")
+    write_to_neo4j(
+        user_table.select("name").distinct(), "CREATE (:Customer {name:event.name})"
+    )
+    write_to_neo4j(
+        purchase_history_table.select("dishName").distinct(),
+        "CREATE (:Dishes {name:event.dishName})",
+    )
+    write_to_neo4j(
+        purchase_history_table,
+        "MATCH (customer:Customer {name: event.name}) "
+        + "MATCH (restaurant:Restaurant {name: event.restaurantName}) "
+        + "MATCH (dishes:Dishes {name: event.dishName}) "
+        + "CREATE (customer)-[r:has_buy]->(dishes)->[b:buy_at]->(restaurant)",
+    )
